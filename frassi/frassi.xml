@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    file                 : frassi.xml
+    created              : Sat Mar 2 17:02:55 CET 2013
+    copyright            : (C) 2002 Daniel Frassinelli
+-->
+
+<!--    This program is free software; you can redistribute it and/or modify  -->
+<!--    it under the terms of the GNU General Public License as published by  -->
+<!--    the Free Software Foundation; either version 2 of the License, or     -->
+<!--    (at your option) any later version.                                   -->
+
+<!DOCTYPE params SYSTEM "../../libs/tgf/params.dtd">
+<params name="frassi" type="robotdef">
+  <section name="Robots">
+    <section name="index">
+      <section name="0">
+	<attstr name="name" val="frassi 1"></attstr>
+	<attstr name="desc" val=""></attstr>
+	<attstr name="team" val="frassi"></attstr>
+	<attstr name="author" val="Daniel Frassinelli"></attstr>
+	<attstr name="car name" val="155-DTM"></attstr>
+	<attstr name="category" val="Track-4WD-GrB"></attstr>
+	<attnum name="race number" val="0"></attnum>
+	<attnum name="red" val="1.0"></attnum>
+	<attnum name="green" val="1.0"></attnum>
+	<attnum name="blue" val="1.0"></attnum>
+      </section>
+      <section name="1">
+	<attstr name="name" val="frassi 2"></attstr>
+	<attstr name="desc" val=""></attstr>
+	<attstr name="team" val="frassi"></attstr>
+	<attstr name="author" val="Daniel Frassinelli"></attstr>
+	<attstr name="car name" val="car1-trb1"></attstr>
+	<attstr name="category" val="Track-4WD-GrB"></attstr>
+	<attnum name="race number" val="0"></attnum>
+	<attnum name="red" val="1.0"></attnum>
+	<attnum name="green" val="1.0"></attnum>
+	<attnum name="blue" val="1.0"></attnum>
+      </section>
+      <section name="2">
+	<attstr name="name" val="frassi 3"></attstr>
+	<attstr name="desc" val=""></attstr>
+	<attstr name="team" val="frassi"></attstr>
+	<attstr name="author" val="Daniel Frassinelli"></attstr>
+	<attstr name="car name" val="p406"></attstr>
+	<attstr name="category" val="Track-4WD-GrB"></attstr>
+	<attnum name="race number" val="0"></attnum>
+	<attnum name="red" val="1.0"></attnum>
+	<attnum name="green" val="1.0"></attnum>
+	<attnum name="blue" val="1.0"></attnum>
+      </section>
+    </section>
+  </section>
+</params>
