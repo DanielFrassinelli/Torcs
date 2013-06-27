@@ -1,0 +1,13 @@
+
+
+- Print the track with the optimal path computed
+
+set title 'optiaml path'
+set xlabel 'x'
+set ylabel 'y'
+plot 'gnuplot_track.csv' u 1:2 w lines linecolor rgb 'red' notitle , 'gnuplot_track.csv' u 3:4 w lines linecolor rgb 'red' notitle, 'gnuplot_path.csv' with lines title 'path'
+
+
+
+
+
