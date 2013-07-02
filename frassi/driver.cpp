@@ -56,6 +56,7 @@ Driver::Driver(int index){
   myCar = NULL;
   trajectory = NULL;
   allCars = NULL; 
+  log = NULL;
   last = past_data();
 }
 
@@ -66,6 +67,8 @@ Driver::~Driver(){
     delete trajectory;
   if(allCars != NULL)
     delete allCars;
+  if(log != NULL)
+    delete log;
 }
 
 void Driver::initTrack(int index, tTrack* track, void *carHandle, void **carParmHandle, tSituation *s) 
@@ -112,15 +115,16 @@ int Driver::pitCommand(tCarElt* car, tSituation *s){
 
 void Driver::newrace(int index, tCarElt* car, tSituation *s) 
 {
+  
  this->car = car;
  myCar = new carData(car);
  trajectory = new trajectoryPlanner(car , myCar , track);
- allCars = new opponents(s , track);  
+ allCars = new opponents(s , track);
+ log = new logger(track, car , myCar , trajectory);
  stuck = 0;
  gearTime = 0.0;
  clutchTime = 0.0;
  
- logger.open("/home/daniel/Desktop/torcs/tracciato_path_car.csv");
 }
 
 void Driver::drive(int index, tSituation *s) 
@@ -154,9 +158,6 @@ void Driver::drive(int index, tSituation *s)
       car->ctrl.gear = getGear();  
       car->ctrl.clutchCmd = getClutch();
     }
-    
-    logger << car->_pos_X << " \t " << car->_pos_Y << endl;
-    
 
     finalUpdate(s);
   
@@ -194,9 +195,9 @@ void Driver::initialUpdate(tSituation* s)
 
   myCar->updateCar(s);
 
-  allCars->updateCars(car,s);
-  allCars->computeStatus(car);
-  enemyCars = allCars->getEnemyCarsPnt(car);
+  allCars->updateCars(myCar,s);
+  allCars->computeStatus(myCar);
+  enemyCars = allCars->getEnemyCarsPnt(myCar);
 
   trajectory->computeTrajectory(enemyCars);
   
@@ -209,14 +210,17 @@ void Driver::initialUpdate(tSituation* s)
   
   gearTime = MAX(0.0 , gearTime - RCM_MAX_DT_ROBOTS);
   
-  if(isStuck())
+  bool stuck = isStuck();
+  
+  if(stuck)
     myCar->setMode(STUCK);
   else  
-    if(car->_gear == 1 && car->_speed_x < FILTER_ACCEL_START_MODE_SPEED)
+    if(car->_gear <= 1 && car->_speed_x < FILTER_ACCEL_START_MODE_SPEED)
       myCar->setMode(START);
     else
-      if(car->_speed_x >= 5.0 && car->_gear > 1 && !isStuck())
+      if(car->_gear > 1 && !stuck && car->_speed_x >= 5.0)
 	myCar->setMode(NORMAL);
+
 }
 
 void Driver::finalUpdate(tSituation *s)
@@ -225,8 +229,10 @@ void Driver::finalUpdate(tSituation *s)
   last.speed_x = car->_speed_x;
   last.trajangle = trajangle;
   last.carYaw = car->_yaw;
+  
+  log->log(s);
+  
 }
-
 
 int Driver::getGear()
 {
@@ -235,8 +241,7 @@ int Driver::getGear()
   
     if (car->_gear <= 0) 
       return 1;
-    double gr_up = car->_gearRatio[car->_gear + car->_gearOffset];
-    double omega = car->_enginerpmRedLine/gr_up;
+    double omega = car->_enginerpmRedLine/myCar->getGearUp();
     double wr = car->_wheelRadius(REAR_RGT);
 
     if (omega*wr*GEAR_UP_SPEED_GAIN < car->_speed_x)
@@ -246,8 +251,7 @@ int Driver::getGear()
     }
     else 
     {
-      double gr_down = car->_gearRatio[car->_gear + car->_gearOffset - 1];
-      omega = car->_enginerpmRedLine/gr_down;
+      omega = car->_enginerpmRedLine/myCar->getGearDown();
 	if (car->_gear > 1 && omega*wr*GEAR_UP_SPEED_GAIN > car->_speed_x + GEAR_DOWN_SPEED_GAIN)
 	  return car->_gear - 1;
     }

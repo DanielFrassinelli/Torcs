@@ -24,8 +24,6 @@ int trajectoryPlanner::nodePerLine = 0;
 int trajectoryPlanner::nodePerPos = 0;
 int trajectoryPlanner::nodePerSector = 0;
 
-const int trajectoryPlanner::LAP_PLANNING = 2;
-
 const double trajectoryPlanner::PATH_MAX_DIST  = 0.35;
 const double trajectoryPlanner::PATH_MAX_STEER = 0.30;
 const double trajectoryPlanner::RECOMPUTE_TIME = 5.00; /* 5 seconds */
@@ -39,12 +37,6 @@ trajectoryPlanner::trajectoryPlanner(tCarElt *mycar , carData *myCarData ,  tTra
   this->myCar = myCarData;
 
   initTrajectory();
-  
-  if(LOG_PATH_GNUPLOT)
-    logPath();
-
-  if(LOG_CAR_AND_TRACK_DATA)
-    logTrack();  
 
 }
 
@@ -91,7 +83,7 @@ void trajectoryPlanner::computeOptimalTrajectory(vector <opponent *> * enemyCars
   
   tangentAngle = RtTrackSideTgAngleL(&(car->_trkPos));
   
-  /*TODO enemyCars -> for each one obtain the conflict with the arc of our graph,
+  /*TODO enemyCars -> for each obtain the conflict with the arc of our graph,
   * update the graph , and recompute dijktra
   * restore the default arcmap
   */
@@ -107,9 +99,9 @@ void trajectoryPlanner::computeOptimalTrajectory(vector <opponent *> * enemyCars
   
   allowedSpeed = getOptimalSpeed();
 
-  checkPath();	/* this is used to decide is the car is too far from the trajectory, if yes it sets recomputePath true */
-  
-  if(recomputePath)	/* if I have to recompute the path */
+  checkPath();	/* this is used to decide is we need to recompute the path*/
+
+  if(recomputePath)	// if I have to recompute the path 
   {  
     computeOptimalPath(findNearestNode());
     recomputePath = false;
@@ -271,6 +263,23 @@ bool trajectoryPlanner::loadNodes(){
   nodePerPos    = nodePerSector / nodePerLine;
 
   input.close();
+ 
+ //TODO beta version 
+  
+ for(nodeIt n(graph); n != INVALID; ++n)	/* for each node I find the segment that contains it */
+ {
+   tTrackSeg *seg = track->seg;
+   tTrackSeg *base = seg;
+   
+   do{
+     if(isInsideSeg(nodeData[n].pos, seg))
+       break;
+     else    
+      seg = seg->next;
+    }while(base != seg);
+
+    nodeData[n].seg = seg;    
+  }
   
   return true;
 
@@ -280,7 +289,7 @@ bool trajectoryPlanner::loadLinks(){
   
   char linksFilePath[255];
   string line , temp;
-  int src , dst;
+  int src = 0 , dst = 0;
   
   strcpy(linksFilePath , BASE_PATH);
   strcat(linksFilePath , track->internalname);
@@ -381,6 +390,8 @@ bool trajectoryPlanner::loadManeuvers(){
       node tmp = graph.nodeFromId(i);
       nodeData[tmp].angle = lastAngle;   
     }
+  
+  int cou = 0;
     
   while (input) 
       {	
@@ -410,7 +421,9 @@ bool trajectoryPlanner::loadManeuvers(){
 	    default : break;	  
 	  }	  
 	}
-	
+
+	cou ++;
+
 	if(time == 0.0)	 /* the first maneuver is useless */
 	  continue;
 	
@@ -424,35 +437,91 @@ bool trajectoryPlanner::loadManeuvers(){
 	
 	arcDist[currentArc] += time;
 
-	if(currentSector != nodeData[s].sector)	/* with this method we update all the angle of the new sector with the final angle of the previus */
+
+	if(currentSector != nodeData[s].sector)	// with this method we update all the angle of the new sector with the final angle of the previus 
 	{
-	  start = firstIndexOfSector(currentSector);	/* first node of the first sector */
-	  currentSector = (currentSector + 1) % sectors;	/* new sector */
-	  outArcIt a(graph , graph.nodeFromId(start));	/* one arc of the first node */
+	  start = firstIndexOfSector(currentSector);	// first node of the first sector 
+	  currentSector = (currentSector + 1) % sectors;	// new sector 
+	  arc a = INVALID;
 	  
-	  lastAngle = arcData[a].back().getEndAngle();		/* last angle of the arc, should be equal for all the arcs */
+	  for(int i = start; i < start + nodePerSector; i++)
+	  {
+	    outArcIt t(graph, graph.nodeFromId(i));
+	    if( t != INVALID)
+	     a = t; 
+	  }
+
+	  lastAngle = arcData[a].back().getEndAngle();		// last angle of the arc, should be equal for all the arcs 
 	  
 	  start = firstIndexOfSector(currentSector);	
 	  end = start + nodePerSector;
-	  
-	  for(int i = start; i < end; i++)	/* update the new sector */
+
+	  for(int i = start; i < end; i++)	// update the new sector 
 	  {
 	      node tmp = graph.nodeFromId(i);
 	      nodeData[tmp].angle = lastAngle;   
-	  }  	  
+	  }  
 	}
-    	
+
 	v2d position = (arcData[currentArc].empty()) ? nodeData[graph.source(currentArc)].pos : arcData[currentArc].back().getEndPoint(); 
 	angle        = (arcData[currentArc].empty()) ? nodeData[graph.source(currentArc)].angle : arcData[currentArc].back().getEndAngle();
-			
-	maneuver man(position , myCar , dist , radius , angle , speed , cx + baseX , cy + baseY); 
+	tTrackSeg *startSeg = (arcData[currentArc].empty()) ? nodeData[graph.source(currentArc)].seg : arcData[currentArc].back().getEndSeg();
+	tTrackSeg *endSeg = nodeData[graph.target(currentArc)].seg;	
+	
+	maneuver man(position , myCar , dist , radius , angle , speed , cx + baseX , cy + baseY, startSeg, endSeg, this); 
 
 	arcData[currentArc].push_back(man);
-      }   
+
+      }       
       return true;     
 }
 
-bool trajectoryPlanner::isInside(const v2d point , const tTrackSeg *seg){  
+double trajectoryPlanner::distFromSegStart(const v2d point, const tTrackSeg *seg){
+  
+  if(seg->type == TR_STR)
+  {
+    v2d target;
+    
+    v2d sp(seg->vertex[TR_SL].x , seg->vertex[TR_SL].y);
+    v2d ep(seg->vertex[TR_EL].x , seg->vertex[TR_EL].y);
+    
+    if(sp.y == ep.y)
+    {
+      target.x = point.x;
+      target.y = sp.y;
+    }
+    else if(sp.x == ep.x)
+    {
+      target.y = point.y;
+      target.x = sp.x;
+    }
+    else{
+            
+    double m1 = (sp.y-ep.y)/(sp.x-ep.x);
+    double q1 = ep.y - ep.x*m1;
+    
+    double m2 = -1/m1;
+    double q2 = point.x/m1 + point.y;
+
+    target.x = (q1-q2)/(m2-m1);
+    target.y = q1 + m1*target.x;
+    }    
+    return target.dist(point);
+  }
+  else
+  {
+    v2d center(seg->center.x , seg->center.y);
+    v2d pnt = point - center; 
+    v2d tmp = v2d(seg->vertex[TR_SL].x, seg->vertex[TR_SL].y) - center;
+    double theta = acos((pnt * tmp)/ (pnt.len() * tmp.len())); 
+    double radius = point.dist(center);
+    return radius * theta;   
+  }
+
+}
+
+
+bool trajectoryPlanner::isInsideSeg(const v2d point , const tTrackSeg *seg){  
   v2d P1(seg->vertex[TR_SL].x, seg->vertex[TR_SL].y);
   v2d P2(seg->vertex[TR_SR].x, seg->vertex[TR_SR].y);
   v2d P3(seg->vertex[TR_ER].x, seg->vertex[TR_ER].y);
@@ -480,30 +549,11 @@ bool trajectoryPlanner::isInside(const v2d point , const tTrackSeg *seg){
       return (dist >= seg->radiusl && dist <= seg->radiusr) && theta >= 0.0 && theta <= seg->arc; 
     else
       return (dist >= seg->radiusr && dist <= seg->radiusl) && theta >= 0.0 && theta <= seg->arc; 
-
-    return false;
   }
-  return false;
-    
-}
-
-void trajectoryPlanner::printCurrentPath(){
   
-  int z = 0;
-  int j = 0;
-  for(pathIt p(path); p != INVALID ; ++p)
-  {
-    j = 0;
-    cout << "PathIndex : "<< z <<" ---------- NODE SRC : " << graph.id(graph.source(p)) << " NODE DST : " << graph.id(graph.target(p)) << endl;
-    z++;  
-    for(unsigned int i = 0; i < arcData[p].size(); i++)
-      {
-	cout << " ********** Maneuver " << j <<" ************* " << endl;
-	j++;
-	arcData[p][i].print();
-      }   
-  } 
+  return false;    
 }
+   
 
 bool trajectoryPlanner::initGraph(){
   
@@ -516,7 +566,7 @@ bool trajectoryPlanner::initGraph(){
   if(!loadManeuvers())
     return false;
 
-  graphExpansion(LAP_PLANNING);
+  graphExpansion();
   
   dijkstra.distMap(nodeDist); //set the map that given a node return the distance computed by dijkstra
       
@@ -525,50 +575,35 @@ bool trajectoryPlanner::initGraph(){
   recomputePath = false;
   recomputeTime = RECOMPUTE_TIME;
 
+  for(pathIt p(path); p != INVALID; ++p)
+  {
+    cout << "------------------------------" << endl;
+    cout << "src seg id : " << nodeData[graph.source(p)].seg->id << " dst seg id : " << nodeData[graph.target(p)].seg->id << endl;
+    
+    for(unsigned int i=0; i < arcData[p].size(); i++)
+    {
+      tTrackSeg *sr = arcData[p][i].getStartSeg();
+      tTrackSeg *ds = arcData[p][i].getEndSeg();
+      cout << "man : " << i << " -> startSeg : " << sr->id << " , endSeg : " << ds->id << endl;
+    }
+ 
+  }
+  
+  
   return true;
   
 }
 
-void trajectoryPlanner::graphExpansion(int n){
+void trajectoryPlanner::graphExpansion(){
     
-  //TODO graph copy
-  // TODO I have to connrect the last sector with the first of the next graph
-  // int offset = countNodes(graph);
-  // int sect = 1;
-   
-  while(n > 1)
-  {     
-    /*for(int i=0; i < offset; i++)
-       graph.addNode();
-    
-    for(int i=0; i < offset; i++)
-    {
-      node src = graph.nodeFromId(i); // node of the 'first' graph
-      node dst = graph.nodeFromId(i + offset); // node just added  
-      
-      nodeData[dst] = nodeData[src];
-      nodeData[dst].sector = sect*sectors + nodeData[src].sector;
-      nodeDist[dst] = 0;
-      
-      for(outArcIt a(graph , src) ; a != INVALID; ++a) // for each outgoing arc      
-      {
-	int target_Id = graph.id(graph.target(a)) + offset;
-	arc tmp = graph.addArc(dst , graph.nodeFromId(target_Id));
-	arcData[tmp] = arcData[a];
-	arcDist[tmp] = arcDist[a];	
-      }      
-    }
-    sect += 1;		// sector increment 
-    offset += offset;	// node increment*/
-    n -- ;
-  }
+  //TODO graph copy?
   
   int start = firstIndexOfSector(graph.nodeFromId(countNodes(graph) - 1));	/*last sector */
   int end   = start + nodePerSector;
   int instart = firstIndexOfSector(0);				/* first sector */
   int inend   = instart + nodePerSector;
   
-  for(int i = start ; i < end; i++)	/* make the graph cyclic by adding for each final node an arc	 					  of weight zero connected with each node of the first sector*/
+  for(int i = start ; i < end; i++)	/* make the graph cyclic by adding an arc for each final node 					  of weight zero connected with each node of the first sector*/
   {
     node tmp = graph.nodeFromId(i);   
     
@@ -650,20 +685,32 @@ ListDigraph::Node trajectoryPlanner::findNearestNode(){
 void trajectoryPlanner::computeOptimalPath(node src){
 
   if(!path.empty())
-    if(myCar->getMode() == STUCK || src == graph.source(path.nth(pathIndex)))
+    if(myCar->getMode() == STUCK || src == graph.source(path.nth(pathIndex))) //if I'm stuck or the src node is the same of the path 
       return;
+
+  // I create a fake node to make possibile to have the src node as the dst node   
     
+  node fake = graph.addNode();
+  arc x     = graph.addArc(fake, src);
+  arcDist[x] = 0.0;
+    
+  for(inArcIt a(graph, src); a != INVALID; ++a) 
+  {
+    x = graph.addArc(graph.source(a) , fake);
+    arcDist[x] = arcDist[a];    
+  }
+     
   node dst = INVALID;  
   double dist = FLT_MAX;
   mapFill(graph, nodeDist , 0);
   
-  dijkstra.run(src);	
+  dijkstra.run(src , fake);	
   
   int start = firstIndexOfSector(src);	/* sector of the currenct src node */
   int end   = start + nodePerSector;
 
   for(int i = start ; i < end; i++) 	/* for each node in the sector */
-  {					/* this works only if the graph is cyclic, that is true */
+  {					/* this works only if the graph is cyclic */
     node tmp = graph.nodeFromId(i); 	
     if(nodeDist[tmp] > 0.0 && nodeDist[tmp] < FLT_MAX) 
       if(dist > nodeDist[tmp])
@@ -672,18 +719,45 @@ void trajectoryPlanner::computeOptimalPath(node src){
 	dist = nodeDist[tmp];
       }
   }
-   
+  
+  if(nodeDist[fake] > 0.0 && nodeDist[fake] < FLT_MAX && dist > nodeDist[fake])  
+    dst = fake;
+
   if(dst != INVALID)
   {
   path.clear();
-  path = dijkstra.path(dst); //path from dst node		
+  path = dijkstra.path(dst); //path from dst node
+  
+  
+  if(dst == fake)
+  {
+  arc last = path.back();		/* fake arc */  
+  node parent = graph.source(last);	/* source node */  
+  arc target  = INVALID;
+  
+  for(outArcIt out(graph, parent); out != INVALID; ++out) // find the arc connected with the src node
+    if(graph.target(out) == src)
+      target = out;
+  
+  path.eraseBack();		/* remove the fake arc */
+  path.addBack(target);		/* add the corrent arc */
+    
+  }
+  
+  graph.erase(fake);		// erase the fake node
   
   pathIndex = 0;		 /* now we are on the first arc of the path */
   manIndex = 0;			 /* same for the manuevers */
   traj = arcData[path.front()]; /* maneuvers of the first arc */
+  
+  trajLength = 0;
+  
+  for(int i=0; i < path.length(); i++)
+    trajLength += arcData[path.nth(i)].size(); 
  
   cout << "******************* " << endl;
-  cout << "Dijsktra recomputed " << endl;  
+  cout << "Dijsktra recomputed " << endl;
+  cout << "src node : " << graph.id(graph.source(path.front())) << " dst node : " << graph.id(graph.target(path.back())) << endl;
   
   }
 }
@@ -701,9 +775,76 @@ void trajectoryPlanner::checkPath(){
     recomputePath = true;
 }
 
+bool trajectoryPlanner::isCarInsideArc(arc t){
+   
+ //TODO base version, duplicate oparations
+  
+    int cid = car->_trkPos.seg->id;
+    int sid = nodeData[graph.source(t)].seg->id;
+    int did = nodeData[graph.target(t)].seg->id;
+    
+  // cout << "test : "  << cid << " did : " << did << " sid : " << sid << endl;
+  
+    if(sid <= did)
+    {
+      if(cid < did && cid > sid)
+	return true;
+    }
+    else 
+      if(cid < did || cid > sid)
+	return true;
+      
+
+    if(cid == sid)
+    {
+      int i = 0; // first maneuver
+      int length = arcData[t].size();
+      maneuver *man;
+      do{
+	man = getManeuver(t,i);    
+	if(man->isInside(car))
+	  return true;
+	  i++;   	    
+	}while(man->getEndSeg()->id <= did && i < length);  
+      return false;   
+    }
+    else
+      if(cid == did)
+      {
+	int i = arcData[t].size() - 1;
+	maneuver *man;
+	do{
+	  man = getManeuver(t,i);    
+	  if(man->isInside(car))
+	    return true;
+	    i--;   	    
+	  }while(man->getEndSeg()->id >= sid && i >= 0); 
+	return false;
+      }
+
+    return false;      
+}
+
 void trajectoryPlanner::findPosition(){
   
-  while(!traj[manIndex].isInside(car))	/* while I'm not in the current Maneuver */
+  //TODO improve
+  pathIt z(path);
+  
+  while(z != INVALID)
+  {
+   if(isCarInsideArc(z))
+    {
+     // cout << "path found : src node " << graph.id(graph.source(z)) << " dest node : " << graph.id(graph.target(z)) << endl; 
+      break;
+    }
+    ++z;
+  }
+
+  int counter = 0;
+  int p = pathIndex;
+  int m = manIndex;
+  
+  while(!traj[manIndex].isInside(car) && counter <= trajLength)	/* while I'm not in the current Maneuver */
   {	
       manIndex ++;	/* inc maneuver index */     
       if((unsigned) manIndex == traj.size()) /* arc increment */
@@ -713,6 +854,12 @@ void trajectoryPlanner::findPosition(){
 	traj = arcData[path.nth(pathIndex)];
       }
   }  
+  if(counter <= trajLength)
+    return;
+  pathIndex = p;
+  manIndex  = m;  
+  
+ 
 }
 
 inline void trajectoryPlanner::incManeuver(int &p , int &m){
@@ -759,370 +906,7 @@ inline int trajectoryPlanner::decPathIndex(int p){
   return p;
 }
 
-void trajectoryPlanner::logTrack(){
-  
-  char filePath[255];
-  
-  strcpy(filePath , BASE_PATH);
-  strcat(filePath , track->internalname);
-  strcat(filePath , "/");
-  strcat(filePath , car->_carName);
-  strcat(filePath , TRACK_LOG_PATH);
-  
-  ofstream log(filePath); 
-  
-  if(!log.is_open())
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Error, can't open : track log : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-    return;
-  }
-  else
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Logging track in : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-  }
-  
-  tTrackSeg *seg = track->seg;
-  
-  int first_id = seg->id; 
-  double length_sum = 0;
-  bool exit = false;
-  double arc_sum = 0;
-  double prec_arc , prec_radius;
-  
-  double width = FLT_MAX;
-  double mu = FLT_MAX;
-
-  do{
-    
-    if(seg->width < width)
-      width = seg->width;
-    if(seg->surface->kFriction < mu)
-      mu = seg->surface->kFriction;
-    
-    if(seg->type == TR_STR)
-    {
-      length_sum = 0;
-      do{
-	length_sum += seg->length;
-	seg = seg->next;
-	if(seg->id == first_id)
-	  exit = true;
-      }while(seg->type == TR_STR && exit == false);
-	
-      log << "[0,0," << length_sum << "]"<< endl; 
-       
-    }
-    else
-    {
-      if(seg->type == TR_LFT)
-      {
-	if(seg->prev->type != TR_STR)
-	  log << "[0,0,0.1]"<< endl; 	
-	arc_sum = 0;
-	do{
-	arc_sum += seg->arc;
-	prec_arc = seg->arc;
-	prec_radius = seg->radius;
-	seg = seg->next;
-	if(seg->id == first_id)
-	  exit = true;
-  
-	}while(seg->type == TR_LFT && exit == false && prec_radius == seg->radius && prec_arc == seg->arc);
-	
-	log << "[1," << prec_radius << "," << arc_sum << "]" << endl;
-	
-      }
-      else
-      {
-	if(seg->prev->type != TR_STR)
-	  log << "[0,0,0.1]"<< endl; 
-	arc_sum = 0;
-	do{
-	arc_sum -= seg->arc;
-	prec_arc = seg->arc;
-	prec_radius = seg->radius;
-	seg = seg->next;
-	if(seg->id == first_id)
-	  exit = true;
-  
-	}while(seg->type == TR_RGT && exit == false && prec_radius == seg->radius && prec_arc == seg->arc);
-	
-	log << "[1," << prec_radius << "," << arc_sum << "]" << endl;
-
-	}
-      }
-
-  }while(exit == false);
-  
-  log.close();
- 
-  strcpy(filePath , BASE_PATH);
-  strcat(filePath , track->internalname);
-  strcat(filePath , "/");
-  strcat(filePath , car->_carName);
-  strcat(filePath , CAR_DATA_LOG_PATH);
-  
-  log.open(filePath); 
-  
-  if(!log.is_open())
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Error, can't open : car log : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-    return;
-  }
-  else
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Logging car in : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-  }
-  
-  double maxAccel = 13.9;
-  double maxBrake = -34.8;
-  double minTurning = 6.0;
-  double maxSpeed = 81;
-  
-  log << "\n-------------------------------------------------------------" << endl;
-  log << "Track data : width -> " << width - car->_dimension_y/2.0 << " , mu -> " << mu << endl;
-  log << "0 -> straight , 1 -> curve "<< endl;  
-  log << "\n-------------------------------------------------------------" << endl;
-  log << "Car data " << endl;
-  log << " vehicle{1}.A  = "<< maxAccel <<  "; % Maximum longitudinal aceleration  - m/s^2" << endl;
-  log << " vehicle{1}.D  = "<< maxBrake <<  "; % Maximum longitudinal deceleration - m/s^2" << endl;
-  log << " vehicle{1}.Rm  = "<< minTurning << "; % Minimum turning radius - m" << endl;
-  log << " vehicle{1}.L  = "<< car->_dimension_x <<  "; % Car length - m" << endl;
-  log << " vehicle{1}.W  = "<< car->_dimension_y <<  "; % Car width - m" << endl;
-  log << " bw = 0.4*vehicle{1}.A/"<< maxAccel << "; % Normalized viscous friction" << endl;
-  log << " vehicle{1}.b = 0.45/0.4*bw;     % Viscous friction" << endl;
-  log << " vehicle{1}.VM    = " << maxSpeed << "; % Maximum velocity - m/s" << endl;
-  log << " % sqrt((mu*G*R) / (1.0 - MIN(1.0, R*CA*mu/mass)))  Maximum lateral acceleration - m/s^2 " << endl;
-  log << " % mu = " << mu << " , G = 9.81 , R = radius , CA = "<< myCar->getCA() <<" , mass = "<< myCar->getMass() << endl;
-  log << "\n-------------------------------------------------------------" << endl;
-  
-}
-
-void trajectoryPlanner::logPath2(){
-
-   
-  ofstream log("/home/daniel/Desktop/tracciato/track.txt");
-  
-  tTrackSeg *seg = track->seg->next; //segment 0
-  
-  int segId = seg->id; //0
-
-  float angle = RtTrackSideTgAngleL(&(car->_trkPos)); // initial angle
-  NORM0_2PI(angle);
-
-  do{
-    int points = seg->length / 4;
-    float pnt = points + 1.0;
-
-    if(seg->type == TR_STR)
-    {    
-
-    float UPPERXSECT = (seg->vertex[TR_EL].x - seg->vertex[TR_SL].x) / pnt;
-    float UPPERYSECT = (seg->vertex[TR_EL].y - seg->vertex[TR_SL].y) / pnt;
-    float LOWERXSECT = (seg->vertex[TR_ER].x - seg->vertex[TR_SR].x) / pnt;
-    float LOWERYSECT = (seg->vertex[TR_ER].y - seg->vertex[TR_SR].y) / pnt;
-
-    for(int i=0; i <= points; i++){
-	float xl = seg->vertex[TR_SL].x + i*UPPERXSECT;
-	float yl = seg->vertex[TR_SL].y + i*UPPERYSECT;
-	float xr = seg->vertex[TR_SR].x + i*LOWERXSECT;
-	float yr = seg->vertex[TR_SR].y + i*LOWERYSECT;
-
-	log << xl << " \t " << yl << " \t " << xr << " \t " << yr << endl;	
-      }     
-    }
-    else {
-      float cx = seg->center.x;
-      float cy = seg->center.y;
-      float ca = seg->angle[TR_CS]; 
-      int points = seg->length / 4;
-      float pnt = points + 1.0;  
-      float arcstep = seg->arc / pnt; 
-      float radiusL = seg->radiusl;
-      float radiusR = seg->radiusr;
-
-      for(int i=0; i <= points; i++){
-	
-	float tmpAngle ;
-	
-	if(seg->type == TR_LFT)
-	  tmpAngle = ca + arcstep*i;
-	else
-	  tmpAngle = ca - arcstep*i;
-	
-	float xl = cx + radiusL * cos(tmpAngle);
-	float yl = cy + radiusL * sin(tmpAngle);
-	float xr = cx + radiusR * cos(tmpAngle);
-	float yr = cy + radiusR * sin(tmpAngle);
-
-	log << xl << " \t " << yl << " \t " << xr << " \t " << yr << endl;	
-	
-	if(seg->type == TR_LFT)
-	  angle += arcstep;
-	else
-	  angle -= arcstep;
-     }   
-    }
-    
-    seg = seg->next;
-    
-  }while(seg->id != segId);
-
-  log.close();
-  
-  log.open("/home/daniel/Desktop/tracciato/nodes.txt");
-  
-  
-  for(nodeIt n(graph); n != INVALID ; ++n)
-  {
-	log << nodeData[n].pos.x << " \t " << nodeData[n].pos.y << endl;
-  }  
-  
-  log.close();
-
-  /*char ciao[255];
-  
-  node f = graph.nodeFromId(3*nodePerSector + nodePerPos);
-
-    for(outArcIt a(graph , f); a != INVALID ; ++a)
-    {  
-    cout << "arc size : " << arcData[a].size() << " node id : " << graph.id(graph.target(a)) << endl;   
-    
-    strcpy(ciao , "/home/daniel/Desktop/tracciato/");
-    strcat(ciao , to_string(graph.id(a)));
-    
-    log.open(ciao);
-    
-    for(unsigned int z=0; z < arcData[a].size(); z++)
-      {
-	arcData[a][z].logManeuver(log);
-      }
-      
-      log.close();
-  }*/
-  
-  
-}
-
-void trajectoryPlanner::logPath(){
-  
-  char filePath[255];
-  
-  strcpy(filePath , BASE_PATH);
-  strcat(filePath , track->internalname);
-  strcat(filePath , "/");
-  strcat(filePath , car->_carName);
-  strcat(filePath , TRACK_GNUPLOT_LOG_PATH);
-  
-  ofstream log(filePath);
-  
-  if(!log.is_open())
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Error, can't open : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-    return;
-  }
-  else
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Logging track in : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-  }
-
-  tTrackSeg *seg = track->seg->next; //segment 0
-  
-  int segId = seg->id; //0
-
-  float angle = RtTrackSideTgAngleL(&(car->_trkPos)); // initial angle
-  NORM0_2PI(angle);
-
-  do{
-    int points = seg->length / 4;
-    float pnt = points + 1.0;
-
-    if(seg->type == TR_STR)
-    {    
-
-    float UPPERXSECT = (seg->vertex[TR_EL].x - seg->vertex[TR_SL].x) / pnt;
-    float UPPERYSECT = (seg->vertex[TR_EL].y - seg->vertex[TR_SL].y) / pnt;
-    float LOWERXSECT = (seg->vertex[TR_ER].x - seg->vertex[TR_SR].x) / pnt;
-    float LOWERYSECT = (seg->vertex[TR_ER].y - seg->vertex[TR_SR].y) / pnt;
-
-    for(int i=0; i <= points; i++){
-	float xl = seg->vertex[TR_SL].x + i*UPPERXSECT;
-	float yl = seg->vertex[TR_SL].y + i*UPPERYSECT;
-	float xr = seg->vertex[TR_SR].x + i*LOWERXSECT;
-	float yr = seg->vertex[TR_SR].y + i*LOWERYSECT;
-	log << xl << " \t " << yl << " \t " << xr << " \t " << yr <<  endl;	
-      }     
-    }
-    else {
-      float cx = seg->center.x;
-      float cy = seg->center.y;
-      float ca = seg->angle[TR_CS]; 
-      int points = seg->length / 4;
-      float pnt = points + 1.0;  
-      float arcstep = seg->arc / pnt; 
-      float radiusL = seg->radiusl;
-      float radiusR = seg->radiusr;
-
-      for(int i=0; i <= points; i++){
-	
-	float tmpAngle ;
-	
-	if(seg->type == TR_LFT)
-	  tmpAngle = ca + arcstep*i;
-	else
-	  tmpAngle = ca - arcstep*i;
-	
-	float xl = cx + radiusL * cos(tmpAngle);
-	float yl = cy + radiusL * sin(tmpAngle);
-	float xr = cx + radiusR * cos(tmpAngle);
-	float yr = cy + radiusR * sin(tmpAngle);
-	log << xl << " \t " << yl << " \t " << xr << " \t " << yr <<  endl;		
-	if(seg->type == TR_LFT)
-	  angle += arcstep;
-	else
-	  angle -= arcstep;
-     }   
-    }
-    
-    seg = seg->next;
-    
-  }while(seg->id != segId);
-  
-  log.close();
-  
-  strcpy(filePath , BASE_PATH);
-  strcat(filePath , track->internalname);
-  strcat(filePath , "/");
-  strcat(filePath , car->_carName);
-  strcat(filePath , PATH_GNUPLOT_LOG_PATH);
-  
-  log.open(filePath);
-  
-  if(!log.is_open())
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Error, can't open : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-    return;
-  }
-  else
-  {
-    cout << "\n-------------------------------------------------------------" << endl;
-    cout << "Logging path in : " << filePath << endl; 
-    cout << "-------------------------------------------------------------" << endl;
-  }
+void trajectoryPlanner::logPath(ofstream &log){
 
   for(pathIt p(path); p != INVALID; ++p)
   {
@@ -1130,13 +914,14 @@ void trajectoryPlanner::logPath(){
       {
 	arcData[p][j].logManeuver(log);
       }  
-  }
-   
+  } 
+  
 }
 
 /* ------------------- maneuver ------------------------------------------------------- */
 
-maneuver::maneuver(v2d start, carData *myCar , double dist , double radius, double angle, double speed , double cx , double cy) 
+maneuver::maneuver(v2d start, carData *myCar , double dist , double radius, double angle, double speed ,
+		   double cx , double cy, tTrackSeg *startSeg, tTrackSeg *endSeg, trajectoryPlanner *traj)
 : startPoint(start) , center(cx,cy)
 {
 
@@ -1196,7 +981,22 @@ maneuver::maneuver(v2d start, carData *myCar , double dist , double radius, doub
     }
 
   }
-     
+  
+  //TODO beta version
+  this->startSeg = startSeg; 
+  tTrackSeg *seg = startSeg;
+  
+  do{
+     if(traj->isInsideSeg(endPoint, seg))
+       break;
+     else    
+      seg = seg->next;
+   }while(seg != endSeg);
+    
+   if(seg == endSeg)
+     this->endSeg = endSeg;
+   else
+     this->endSeg = seg;
 }
 
 double maneuver::getDistance(tCarElt *car){
@@ -1269,24 +1069,34 @@ inline double maneuver::angleFromStart(tCarElt *car){
 }
 
 bool maneuver::isInside(tCarElt *car){
+    
+  int cid = car->_trkPos.seg->id;
+  int sid = startSeg->id;
+  int did = endSeg->id;
+    
+  //cout << "test : "  << cid << " did : " << did << " sid : " << sid << endl;
   
+  if(sid <= did)
+  {
+    if(cid < did && cid > sid)
+      return true;
+  }
+  else 
+    if(cid < did || cid > sid)
+      return true;
+      
   if(type == line)
   {
     v2d carPos(car->_pos_X , car->_pos_Y);
-    
-    double d1 = carPos.dist(startPoint);
-    double d2 = carPos.dist(endPoint);
-    double d  = startPoint.dist(endPoint);  
     carPos = carPos.rotate(v2d(0.0,0.0) , -startAngle);
-    return (sx < carPos.x) && (carPos.x < fx) && (d1 < d) && (d2 < d);
+    return (sx <= carPos.x) && (carPos.x <= fx);
   } 
   else
   { 
-    double w = car->_trkPos.seg->width + car->_trkPos.seg->lside->width + car->_trkPos.seg->rside->width;
-    double dist = center.dist(car->_pos_X , car->_pos_Y);    
-    double theta =  angleFromStart(car);
-    
-    return (dist > (radius - w) && dist < (radius + w)) && (theta > 0.0 && theta < arc);
+    //TODO add radius check
+    //double dist = center.dist(car->_pos_X , car->_pos_Y);    
+    double theta =  angleFromStart(car); 
+    return (theta > 0.0 && theta < arc);
   }
   
 }
@@ -1331,25 +1141,6 @@ void maneuver::logManeuver(ofstream &log){
   } 
 }
 
-void maneuver::print(){
-  if(type == line){
-    cout << "angle  : " << startAngle << " -> " << endAngle << endl;
-    cout << "dist   : " << length << " ||| speed : " << speed << endl;  
-    cout << "x      : " << startPoint.x << " -> " << endPoint.x << endl;
-    cout << "y      : " << startPoint.y << " -> " << endPoint.y << endl;    
-  }
-  else
-  {
-    cout << "angle  : " << startAngle << " -> " << endAngle << endl;
-    cout << "dist   : " << length << " ||| speed : " << speed << endl;
-    if(type == curveL)
-      cout << "radius : " << radius << " ||| arc   : " << arc << endl;
-    else
-      cout << "radius : " << radius << " ||| arc   : " << -arc << endl;
-    cout << "x      : " << startPoint.x << " -> " << endPoint.x << endl;
-    cout << "y      : " << startPoint.y << " -> " << endPoint.y << endl;    
-  } 
-}
 
 
 

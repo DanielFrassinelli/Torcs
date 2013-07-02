@@ -21,6 +21,7 @@
 #include "carData.h"
 #include "trajectoryPlanner.h"
 #include "opponent.h"
+#include "logger.h"
 
 class Driver{
   public:
@@ -42,8 +43,8 @@ class Driver{
     
     static const double ACCEL_PI_KI;
     static const double ACCEL_PI_KE;
-    static const double ACCEL_INTEG_LIMIT;
-    static const double ACCEL_CONST_LIMIT;
+    static const double ACCEL_INTEG_LIMIT;	// we have to limit the error because sometimes can be infinite
+    static const double ACCEL_CONST_LIMIT;	// we have to limit the intergral because grows too much
     static const double FILTER_ACCEL_START;
     static const double FILTER_ACCEL_START_MODE_SPEED;
     
@@ -63,18 +64,16 @@ class Driver{
     
     static const double TCL_SLIP;
     static const double TCL_MINSPEED; 
-    
+
     int stuck, index;
     double mass , time_difference , stuckangle , allowedSpeed , trajangle , trajdist;
     double clutchTime , gearTime;
-    
-    ofstream logger;
-    int conter;
 
-    tTrack    *track;	/* pointer to the track */
-    tCarElt   *car;    /* pointer to the car */
-    carData   *myCar;  	/* pointer to class carData */
-    opponents *allCars;  /* pointer to class opponents */ 
+    tTrack    *track;
+    tCarElt   *car;   		
+    carData   *myCar;  
+    opponents *allCars;
+    logger    *log;
     vector <opponent *> * enemyCars; 
     trajectoryPlanner *trajectory;
     

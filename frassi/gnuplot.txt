@@ -1,13 +1,31 @@
 
 
-- Print the track with the optimal path computed
+## Print the track with the optimal path computed
 
 set title 'optiaml path'
 set xlabel 'x'
 set ylabel 'y'
 plot 'gnuplot_track.csv' u 1:2 w lines linecolor rgb 'red' notitle , 'gnuplot_track.csv' u 3:4 w lines linecolor rgb 'red' notitle, 'gnuplot_path.csv' with lines title 'path'
 
+## Print the trajetory of the car
 
+set title 'trajectory'
+plot 'gnuplot_track.csv' u 1:2 w lines linecolor rgb 'black' notitle , 'gnuplot_track.csv' u 3:4 w lines linecolor rgb 'black' notitle, 'mycar.txt' using 1:2 with lines lw 1.5 lc rgb 'red' title 'my trajectory', 'inferno.txt' using 1:2 w l lw 1.5 lc rgb 'blue' title 'torcs trajectory'
 
+## MY ACCEL
+
+set term jpeg size 1024,768
+set output 'my accel.jpg'
+set title 'my accel'
+set palette model RGB defined (-1.0 'black', 0.0 'blue', 1.0 'red')
+plot 'gnuplot_track.csv' u 1:2 w lines linecolor rgb 'black' notitle , 'gnuplot_track.csv' u 3:4 w lines linecolor rgb 'black' notitle, 'mycar.txt' using 1:2:3 w l lw 2.8 lc palette title 'accel [-1.0 , 1.0]'
+
+## MY SPEED
+
+set term jpeg size 1024,768
+set output 'my speed.jpg'
+set title 'my speed'
+set palette model RGB defined (0.0 'yellow', 83 'red')
+plot 'gnuplot_track.csv' u 1:2 w lines linecolor rgb 'black' notitle , 'gnuplot_track.csv' u 3:4 w lines linecolor rgb 'black' notitle, 'mycar.txt' using 1:2:4 w l lw 2.8 lc palette title 'speed [0.0 , 83.0]'
 
 

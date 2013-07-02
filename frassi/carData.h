@@ -36,27 +36,34 @@ class carData{
     inline double getCW() 			{ return CW; }
     inline double getCA()			{ return CA; }
     inline double getSpeedSqr()		{ return speedSqr; }
+    inline double getSpeedOpp()		{ return speedOpp; }
+    inline tCarElt * getCarPnt()		{ return car; }
+    inline int    getCarIndex()		{ return car->_driverIndex; }
     inline double getMass() 			{ return mass; }
     inline double getDrivenWheelSpeed()	{ return (this->*GET_DRIVEN_WHEEL_SPEED)();}
     inline double getAccel(double speed)	{ return (this->*GET_ACCEL_FUNCT)(speed);}
     inline double getCurrentFriction() 	{ return car->_trkPos.seg->surface->kFriction;}
     inline double getMaxSpeed()   		{ return maxSpeed; }
+    inline double getMaxAccel()		{ return maxAccel; }
+    inline double getMaxDecel()		{ return maxDecel; }
+    inline double getMinTurn()			{ return minTurn;  }
     inline double getFriction()   		{ return friction; } 
     inline int    getMode()  	   		{ return mode;     }
     inline double getStuckTime()		{ return stuckTime; }
-  
+    inline double getGearUp()			{ return car->_gearRatio[car->_gear + car->_gearOffset]; }
+    inline double getGearDown()		{ return car->_gearRatio[car->_gear + car->_gearOffset - 1]; }
+    
     /* setter */
   
     inline void   setMode(int x)  		{ mode = x ; }
     
   private:
     
-    static const int LOG_STEP;   		/* log step , in seconds -> LOG_STEP*0.02 */
     static const double CAR_MAX_DEFAULT_SPEED; /* default max speed */
     
     int drivetrain , counter , mode;        
     double lastTime , lastSpeed , CA , CW , CARMASS , speedSqr , mass , maxSpeed , friction;
-    double stuckTime;
+    double stuckTime, minTurn, maxAccel, maxDecel , speedOpp;
     tCarElt *car; 
          
     /* init methods */
@@ -75,12 +82,7 @@ class carData{
     double getAccel_RWD(double speed);
     double getAccel_FWD(double speed);
     double getAccel_4WD(double speed);
-            
-    /* logging methods */
 
-    ofstream log;
-    void initCarLog(); 
-    void logCarData(tSituation *s);
 };
 
 

@@ -42,32 +42,29 @@
 
 #include "linalg.h"
 
-const bool LOG_CAR_AND_TRACK_DATA	= false; /* log the track and car data , used by matlab -> trajectoryPlanner */
-const bool LOG_CAR_TEST    		= false; /* log beavhiour of the car -> carData */
-const bool LOG_PATH_GNUPLOT 		= true; /* log the path/track in gnuplot format -> trajectoryPlanner */
-const bool DEBUG_MESSAGE		= true ; /* show debug messages */
-
+using namespace lemon; /* graph library */
+using namespace std;
 
 enum {START = 0 , NORMAL = 1, STUCK = 2};	/* car mode */
 enum {DRWD = 0, DFWD = 1, D4WD = 2 };  	/* car train type */
 enum {line = 0 , curveL = 1 , curveR = 2 };	/* maneuvers type */
 enum {optimalTraj = 0 , defaultTraj = 1};	/* algorithm type */
+   
+/* public definitions */   
+   
+typedef ListDigraph::Arc  arc; 		/*arc of the graph */
+typedef ListDigraph::Node node; 		/* node of the graph */
+typedef ListDigraph::ArcIt arcIt;  		/* arc iterator */
+typedef ListDigraph::NodeIt nodeIt; 		/* node iterator */
+typedef ListDigraph::OutArcIt outArcIt; 	/* outgoing arc iterator of a node */
+typedef ListDigraph::InArcIt inArcIt;  	 /* ingoing  arc iterator of a node */ 	
+typedef ListPath<ListDigraph>::ArcIt pathIt;	 /* arc iterator for the path */
+    
+/* root folder */
 
+#define BASE_PATH      			"/usr/src/torcs/torcs-1.3.4/src/drivers/frassi/data/"
 
-#define BASE_PATH      		"/home/daniel/Desktop/torcs/"
-
-/* path used for logging tha path and track in gnuplot format */
-
-#define TRACK_GNUPLOT_LOG_PATH  "/log/gnuplot_track.csv"
-#define PATH_GNUPLOT_LOG_PATH	 "/log/gnuplot_path.csv"
-
-/* path used for logging track and car Data */
-
-#define TRACK_LOG_PATH  	"/log/track.csv"
-#define CAR_DATA_LOG_PATH    	"/log/carData.csv"
-#define CAR_TEST_LOG_PATH   	"/log/carTest.csv"
-
-/* file needed for load a graph */
+/* file needed for load the graph */
 
 #define NODES_FILE		  "/nodes.csv"
 #define LINKS_FILE		  "/links.csv"
@@ -82,7 +79,12 @@ const int maneuvers_param = 8;
 /* XML pattern for private attributes */
 
 #define FRASSI_PRIV "frassi private"
+
 #define SECT_MAXSPEED "maxSpeed"
+#define SECT_MAXDECEL "maxDecel"
+#define SECT_MAXACCEL "maxAccel"
+#define SECT_MINTURN  "minTurn"
+
 #define SECT_FRICTION "friction"
 
 #endif

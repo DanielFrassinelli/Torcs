@@ -183,6 +183,9 @@
 	
 	<section name="frassi private">
 	    <attnum name="maxSpeed" val="81.0"/>
+	    <attnum name="maxAccel" val="13.9"/>
+	    <attnum name="maxDecel" val="-34.8"/>
+	    <attnum name="minTurn"  val="6.0"/>
 	    <attnum name="friction" min="0.75" max="1.0" val="0.85" />
 	</section>
 	

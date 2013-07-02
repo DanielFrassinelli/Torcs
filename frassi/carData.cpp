@@ -17,7 +17,6 @@
 
 #include "carData.h"
 
-const int    carData::LOG_STEP = 5;
 const double carData::CAR_MAX_DEFAULT_SPEED = 150.0;
 
 carData::carData(tCarElt *mycar){
@@ -28,6 +27,9 @@ carData::carData(tCarElt *mycar){
   CA = initCA();
   CARMASS =  GfParmGetNum(car->_carHandle, SECT_CAR, PRM_MASS, NULL, 1100);
   maxSpeed = GfParmGetNum(car->_carHandle, FRASSI_PRIV, SECT_MAXSPEED, (char*)NULL, CAR_MAX_DEFAULT_SPEED);
+  maxAccel = GfParmGetNum(car->_carHandle, FRASSI_PRIV, SECT_MAXACCEL, (char*)NULL, -1.0);
+  maxDecel = GfParmGetNum(car->_carHandle, FRASSI_PRIV, SECT_MAXDECEL, (char*)NULL, -1.0);
+  minTurn  = GfParmGetNum(car->_carHandle, FRASSI_PRIV, SECT_MINTURN , (char*)NULL, -1.0);
   friction  = GfParmGetNum(car->_carHandle, FRASSI_PRIV, SECT_FRICTION, (char*)NULL, 1.0);
 
   mass = CARMASS + car->_fuel;
@@ -36,23 +38,22 @@ carData::carData(tCarElt *mycar){
 
   initTrainType();
 
-  if(LOG_CAR_TEST)
-    initCarLog();
 }
 
-void carData::updateCar(tSituation *s){
+void carData::updateCar(tSituation *s){ 
   
   mass = CARMASS + car->_fuel;
   speedSqr = car->_speed_x * car->_speed_x;  
-  
-  if(LOG_CAR_TEST && log != NULL)
-    logCarData(s);
-  
+
   if(mode == STUCK)
     stuckTime += RCM_MAX_DT_ROBOTS;
   else
     stuckTime = 0.0;
   
+  double trackangle = RtTrackSideTgAngleL(&(car->_trkPos));  
+  v2d speed(car->_speed_X, car->_speed_Y);
+  v2d dir(cos(trackangle) , sin(trackangle));
+  speedOpp = speed*dir;  
 }
 
 double  carData::initCA()
@@ -138,55 +139,6 @@ double carData::getBrake(double brake){
   double maxForce = weight + CA*maxSpeed*maxSpeed;
   double force = weight + CA*speedSqr;
   return brake*MIN(1.0, force/maxForce);  
-}
-
-void carData::initCarLog(){
-  char filePath[255];
-  
-  strcpy(filePath , BASE_PATH);
-  strcat(filePath , car->_carName);
-  strcat(filePath , CAR_TEST_LOG_PATH);
-  
-  log.open(filePath);
-  
-  if(log == NULL) 
-  { 
-    cout << "--------------------------------------------------------------" << endl;
-    cout << "Can't open path : " << filePath <<endl;
-    cout << "--------------------------------------------------------------" << endl;
-    return; 
-  }
-  
-  cout << "--------------------------------------------------------------" << endl;
-  cout << "Car's data will be logged in : " << filePath <<endl;
-  cout << "--------------------------------------------------------------" << endl;    
-  log << "# time , speed , gear , accel , radius , speedY , distanceToMiddle " << endl;
-  
-  /* car's data are logged in gnuplot format */
-    
-}
-
-void carData::logCarData(tSituation *s){
-
-  if(counter >= LOG_STEP)
-  {  
-  double  t = lastTime - s->currentTime;
-  double  accel = (lastSpeed - car->_speed_x) / t;
-  
-  lastSpeed = car->_speed_x;
-  lastTime  = s->currentTime;
-  
-  log << s->currentTime << " \t " << car->_speed_x << " \t " << car->_gear << " \t " << accel; 
-  /* with this data you can recover max_speed , accel , decel */
-  
-  log << " \t " << car->_trkPos.seg->radius << " \t " << car->_speed_y << " \t " << car->_trkPos.toMiddle << endl;
-  /* with this you can recover the min turning radius */
-  
-  counter = 0;
-  }
-  else
-    counter ++;
-  
 }
 
 

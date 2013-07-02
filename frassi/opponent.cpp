@@ -17,9 +17,10 @@
 
 #include "opponent.h"
 
-const double opponent::maxFrontCheckDist = 100.0; /* m */ 
-const double opponent::maxBackCheckDist  = -50.0; /* m */
-const double opponent::minSideDist       = 8.0;   /* m */ 
+const double opponent::FRONT_CHECK_DIST  = 100.0; /* m */ 
+const double opponent::BACK_CHECK_DIST   = -50.0; /* m */
+const double opponent::LENGTH_MARGIN 	  = 2.0;   /* [m] safety margin */
+const double opponent::SIDE_MARGIN 	  = 1.0;   /* [m] safety margin */
 
 opponent::opponent() 
 {}
@@ -29,47 +30,63 @@ void opponent::init(tCarElt *car , tTrack *track){
   this->track = track; 
 }
 
-void opponent::computeStatus(tCarElt *me){
+void opponent::computeStatus(carData *myCar){
   
   //TODO there we compute if the cars are going to collide and we set the structure state
 
-  status *tmp = &state[me->_driverIndex]; 
+  status *tmp = &state[myCar->getCarIndex()]; 
   tmp->state = oppIgnore;
   
-  if(car->_state & RM_CAR_STATE_NO_SIMU || car == me)
+  if(car->_state & RM_CAR_STATE_NO_SIMU || car == myCar->getCarPnt())
     return; /* we don't need to compute if we are the car of the car is no longer in the simulation */
 
-  tmp->distX = distToStart - me->_distFromStartLine;
+  tmp->distX = distToStart - myCar->getCarPnt()->_distFromStartLine;
 
-  if(tmp->distX > maxFrontCheckDist || tmp->distX < maxBackCheckDist)
+  if(tmp->distX > FRONT_CHECK_DIST || tmp->distX < BACK_CHECK_DIST)
     return; /* if the car is too far away, we return */
-  
-  if(tmp->distX > 0)
-    tmp->state |= oppFront;
-  else
-    tmp->state |= oppBack;
-  
-  if(fabs(tmp->distX) < minSideDist)
-    tmp->state |= oppSide;
-  
-  
-  tmp->state = oppColl;
+
+  tmp->sideCollDist = MIN(car->_dimension_x, myCar->getCarPnt()->_dimension_x);  
+    
+   /*is opponent in front and slower */
+ /* if (tmp->distX > tmp->sideCollDist && speed < myCar->getSpeedOpp()) {
+      tmp->catchDist = myCar->getSpeedOpp()*tmp->distX/(myCar->getSpeedOpp()- speed);
+      tmp->state |= OPP_FRONT;
+      tmp->distX -= MAX(car->_dimension_x, myCar->getCarPnt()->_dimension_x);
+      tmp->distX -= LENGTH_MARGIN;
+      
+      float cardist = car->_trkPos.toMiddle - mycar->_trkPos.toMiddle;
+      sidedist = cardist;
+      cardist = fabs(cardist) - fabs(width/2.0) - mycar->_dimension_y/2.0;
+      
+      if (cardist < SIDE_MARGIN) state |= OPP_COLL;
+        }*/
   
 }
 
-void opponent::update(tCarElt *me){
+void opponent::update(carData *myCar){
   
   //TODO there we compute the path followed by the car
-
-  position.x = car->_pos_X;
-  position.y = car->_pos_Y;
+  
+  if(car->_state & RM_CAR_STATE_NO_SIMU)
+    return; /* we don't need to compute if we are the car of the car is no longer in the simulation */
+    
+  pos.x = car->_pos_X;
+  pos.y = car->_pos_Y;
   
   currentSeg = car->_trkPos.seg;
   
-  if(car == me)
+  trackAngle = RtTrackSideTgAngleL(&(car->_trkPos));
+  
+  if(car == myCar->getCarPnt())
     distToStart = car->_distFromStartLine;  
   else
-    distToStart = currentSeg->lgfromstart + getDistToSegStart();  
+    distToStart = currentSeg->lgfromstart + getDistToSegStart(); 
+  
+  /* update speed in track direction */
+  speed = getSpeed();
+  float cosa = speed/sqrt(car->_speed_X*car->_speed_X + car->_speed_Y*car->_speed_Y);
+  float alpha = acos(cosa);
+  width = car->_dimension_x*sin(alpha) + car->_dimension_y*cosa;
 
 }
 
@@ -81,6 +98,13 @@ double opponent::getDistToSegStart(){
     } else {
         return car->_trkPos.toStart*car->_trkPos.seg->radius;
     }  
+}
+
+
+double opponent::getSpeed(){   
+  v2d speed(car->_speed_X, car->_speed_Y);
+  v2d dir(cos(trackAngle) , sin(trackAngle));
+  return speed*dir;  
 }
 
 /*------------------------------------------------ opponents */
@@ -109,23 +133,23 @@ opponents::~opponents(){
   cars = NULL;
 }
 
-void opponents::updateCars(tCarElt *me , tSituation *s){  
+void opponents::updateCars(carData *myCar , tSituation *s){  
   if(lastUpdate != s->currentTime)
   {
     for(int i=0; i < cars_num; i++)
-      cars[i].update(me);
+      cars[i].update(myCar);
     lastUpdate = s->currentTime;
   }
 }
 
-void opponents::computeStatus(tCarElt *me){  
+void opponents::computeStatus(carData *myCar){  
   for(int i=0; i < cars_num; i++)
-    cars[i].computeStatus(me);
+    cars[i].computeStatus(myCar);
   
-  enemies[me->_driverIndex].clear(); 
+  enemies[myCar->getCarIndex()].clear(); 
   
   for(int i=0; i < cars_num; i++)
-    if(cars[i].getState(me) != oppIgnore)
-      enemies[me->_driverIndex].push_back(&cars[i]);
+    if(cars[i].getState(myCar) != oppIgnore)
+      enemies[myCar->getCarIndex()].push_back(&cars[i]);
 }
 

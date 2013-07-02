@@ -1,0 +1,19 @@
+
+-------------------------------------------------------------
+Track data : width -> 14.03 , mu -> 1.2
+0 -> straight , 1 -> curve 
+
+-------------------------------------------------------------
+Car data 
+ vehicle{1}.A  = 13.9; % Maximum longitudinal aceleration  - m/s^2
+ vehicle{1}.D  = -34.8; % Maximum longitudinal deceleration - m/s^2
+ vehicle{1}.Rm  = 6; % Minimum turning radius - m
+ vehicle{1}.L  = 4.52; % Car length - m
+ vehicle{1}.W  = 1.94; % Car width - m
+ bw = 0.4*vehicle{1}.A/13.9; % Normalized viscous friction
+ vehicle{1}.b = 0.45/0.4*bw;     % Viscous friction
+ vehicle{1}.VM    = 81; % Maximum velocity - m/s
+ % sqrt((mu*G*R) / (1.0 - MIN(1.0, R*CA*mu/mass)))  Maximum lateral acceleration - m/s^2 
+ % mu = 1.2 , G = 9.81 , R = radius , CA = 2.64311 , mass = 9.11167e-263
+
+-------------------------------------------------------------

@@ -16,7 +16,7 @@
 ROBOT       = frassi
 MODULE      = ${ROBOT}.so
 MODULEDIR   = drivers/${ROBOT}
-SOURCES     = ${ROBOT}.cpp driver.cpp carData.cpp trajectoryPlanner.cpp opponent.cpp
+SOURCES     = ${ROBOT}.cpp driver.cpp carData.cpp trajectoryPlanner.cpp opponent.cpp logger.cpp
 
 SHIPDIR     = drivers/${ROBOT}
 SHIP        = ${ROBOT}.xml 155-DTM.rgb logo.rgb

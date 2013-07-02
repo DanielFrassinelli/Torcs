@@ -35,36 +35,37 @@ public:
   typedef struct {
       int state;
       double distX , distY;
+      double oppSpeed, sideCollDist, catchDist;
   } status;   
   
   opponent();
 
   void init(tCarElt *car , tTrack *track);
-  void update(tCarElt *me);
-  void computeStatus(tCarElt *me); /* compute the status between myCar and the opponent */
+  void update(carData *myCar);
+  void computeStatus(carData *myCar); /* compute the status between myCar and the opponent */
   
-  inline v2d getPosition(){ return position; }
-  inline double getSpeed() { return car->_speed_x; }
-  inline int 	getState(tCarElt *me) { return state[me->_driverIndex].state; };
+  inline int 	getState(carData *myCar) { return state[myCar->getCarIndex()].state; };
   inline tCarElt * getCarPnt() { return car; }
-  inline status  * getStatus(tCarElt *me) { return &state[me->_driverIndex]; };
+  inline status  * getStatus(carData *myCar) { return &state[myCar->getCarIndex()]; };
 
 private:
-  static const double maxBackCheckDist;
-  static const double maxFrontCheckDist;
-  static const double minSideDist;
+  static const double BACK_CHECK_DIST;
+  static const double FRONT_CHECK_DIST;
+  static const double LENGTH_MARGIN;
+  static const double SIDE_MARGIN;
   
-  v2d position, direction;
+  v2d pos, dir;
   tCarElt *car;
   tTrack  *track;
   tTrackSeg *currentSeg;
 
-  double trackAngle , distToStart;
+  double trackAngle , distToStart, width, speed;
 
   status state[10]; 	  /* array that contains data related to the driver with index i */
-			  /* array size is 10 because there are at max 10 players */
+			  /* array size is 10 because our robot can have 10 drivers max */
 			  
   double getDistToSegStart(); /* return the dist of a car from the start of the currentSeg */
+  double getSpeed();	       /* return the speed in track direction */
 			  			   
 };
 
@@ -74,17 +75,17 @@ public:
   opponents(tSituation *s , tTrack *track);
   ~opponents();
   
-  vector <opponent *> enemies[10];	/* for each driver, this vector contains a list of dangerouns oppoenents */
+  vector <opponent *> enemies[10];	/* for each driver, this vector contains a list of dangerous oppoenents */
   
   static opponent * cars;
   static int cars_num;
   static double lastUpdate;
   
   inline int getEnemyCarsNum() { return cars_num - 1;}
-  inline vector <opponent *> * getEnemyCarsPnt(tCarElt *me) { return &enemies[me->_driverIndex];}
+  inline vector <opponent *> * getEnemyCarsPnt(carData *myCar) { return &enemies[myCar->getCarIndex()];}
 
-  void updateCars(tCarElt *me , tSituation *s); 			/* update the param for each cars, this method is executed one time per robot call */
-  void computeStatus(tCarElt *me); 					/* compute the structure status for each car */
+  void updateCars(carData *myCar , tSituation *s); 			/* update the param for each cars, this method is executed one time per robot call */
+  void computeStatus(carData *myCar); 					/* compute the structure status for each car */
 
 };
 
